@@ -44,8 +44,7 @@ class L4Mirror14(app_manager.RyuApp):
         tcph = pkt.get_protocols(tcp.tcp)
 
         out_port = 2 if in_port == 1 else 1
-        #
-        #dst, src = (eth.dst, eth.src)
+        
         acts = [psr.OFPActionOutput(out_port)]
         #identify TCP packet
         if tcph:
@@ -53,24 +52,29 @@ class L4Mirror14(app_manager.RyuApp):
             ip_proto = ip_header.proto
             tcp_header = tcph[0]
             #if packet comes from port 2
-            if in_port == 2 and tcp_header.has_flags(tcp.TCP_SYN) and not(tcp_header.has_flags(tcp.TCP_ACK)):
-                if (ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port) in self.ht:
-                    self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] += 1
-                else:
-                    self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] = 1
+            print(tcp_header, in_port)
+            if in_port == 2:
                 acts.append(psr.OFPActionOutput(3))
-                if self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] == 10:
-                    self.ht.pop((ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port))
-                    mtc = psr.OFPMatch(eth_type=eth_type, ip_proto=ip_proto, in_port=in_port, ipv4_src=ip_header.src, ipv4_dst=ip_header.dst, tcp_src=tcp_header.src_port, tcp_dst=tcp_header.dst_port)
-                    self.add_flow(dp, 1, mtc, acts, msg.buffer_id)
-                    if msg.buffer_id != ofp.OFP_NO_BUFFER:
-                        return
+                if tcp_header.has_flags(tcp.TCP_SYN) and not(tcp_header.has_flags(tcp.TCP_ACK)):
+                    self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] = 1
+                else:
+                    if (ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port) in self.ht:
+                        self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] += 1
+                    else:
+                        self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] = 1
+               
+                    if self.ht[(ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port)] == 10:
+                        self.ht.pop((ip_header.src, ip_header.dst, tcp_header.src_port, tcp_header.dst_port))
+                        mtc = psr.OFPMatch(eth_type=eth_type, ip_proto=ip_proto, in_port=in_port, ipv4_src=ip_header.src, ipv4_dst=ip_header.dst, tcp_src=tcp_header.src_port, tcp_dst=tcp_header.dst_port)
+                        self.add_flow(dp, 1, mtc, acts, msg.buffer_id)
+                        if msg.buffer_id != ofp.OFP_NO_BUFFER:
+                            return
         if tcph and in_port == 1:
             mtc = psr.OFPMatch(eth_type=eth_type, ip_proto=ip_proto, in_port=in_port, ipv4_src=ip_header.src, ipv4_dst=ip_header.dst, tcp_src=tcp_header.src_port, tcp_dst=tcp_header.dst_port)
             self.add_flow(dp, 1, mtc, acts, msg.buffer_id)
             if msg.buffer_id != ofp.OFP_NO_BUFFER:
                 return
-        #
+        
         data = msg.data if msg.buffer_id == ofp.OFP_NO_BUFFER else None
         out = psr.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
                                in_port=in_port, actions=acts, data=data)
